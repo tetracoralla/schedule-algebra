@@ -1,0 +1,9 @@
+interface:
+  display_name: "Schedule Algebra"
+  short_description: "Compute exact bounded schedule intervals."
+  default_prompt: "Use $calculate-schedules to find the exact intervals in these schedules."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "schedule-algebra"
+      description: "Schedule Algebra's bounded read-only interval and recurrence executor"

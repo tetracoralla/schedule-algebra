@@ -1,0 +1,33 @@
+{
+  "name": "schedule-algebra",
+  "version": "0.1.0",
+  "description": "Bounded interval and zoned-recurrence set algebra for Codex.",
+  "author": {
+    "name": "openAdam"
+  },
+  "license": "UNLICENSED",
+  "keywords": [
+    "agents",
+    "availability",
+    "intervals",
+    "rrule",
+    "schedules"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Schedule Algebra",
+    "shortDescription": "Compute exact bounded schedule intervals.",
+    "longDescription": "Give Codex one read-only tool for union, intersection, difference, gaps, and overlap calculations over explicit intervals and bounded zoned recurrences.",
+    "developerName": "openAdam",
+    "category": "Productivity",
+    "capabilities": [
+      "Read"
+    ],
+    "defaultPrompt": [
+      "Find the exact time shared by these schedules.",
+      "Subtract these busy intervals from my working window.",
+      "Expand this bounded RRULE and show the remaining gaps."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

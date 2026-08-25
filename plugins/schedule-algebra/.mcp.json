@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "schedule-algebra": {
+      "command": "node",
+      "args": ["runtime/schedule-algebra-mcp.mjs"],
+      "cwd": "."
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "schedule-algebra",
+  "interface": {
+    "displayName": "Schedule Algebra"
+  },
+  "plugins": [
+    {
+      "name": "schedule-algebra",
+      "source": {
+        "source": "local",
+        "path": "./plugins/schedule-algebra"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
