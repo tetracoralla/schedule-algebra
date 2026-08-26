@@ -9,4 +9,5 @@ sharing technical details.
 
 Reports should include the affected version, a minimal reproduction, impact,
 and whether untrusted input can trigger the issue within Schedule Algebra's
-published request, recurrence, response, timeout, queue, or worker limits.
+published request, recurrence, response, timeout, queue, or isolated-execution
+limits.

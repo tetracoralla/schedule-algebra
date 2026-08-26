@@ -77,22 +77,33 @@ than 2000 occurrences for one recurrence, result-count overflow, and complete
 responses over 524288 UTF-8 bytes. DTSTART may be at most one year before the
 horizon so a tiny output cannot force an unbounded historical scan.
 
-CLI, MCP, and HTTP calls run through an isolated per-call worker. Defaults allow
-two active workers and 32 queued calls; later calls fail explicitly with
-`SERVER_BUSY`. A two-second deadline covers queue time plus worker execution,
-and cancellation terminates the active worker. Each worker receives V8 limits
-of 64 MiB old generation, 16 MiB young generation, and a 4 MiB stack. These are
+CLI, MCP, and HTTP calls run through isolated per-call execution. Source-built
+carriers use a Node Worker; the bundled Codex MCP uses a fresh Node child
+process because Git-installed plugin sandboxes do not reliably start nested
+Workers from the plugin cache. Defaults allow two active executions and 32
+queued calls; later calls fail explicitly with `SERVER_BUSY`. A two-second
+deadline covers queue time plus isolated execution, and cancellation terminates
+the active Worker or process. Both backends apply V8 limits equivalent to 64 MiB
+old generation, 16 MiB young generation, and a 4 MiB stack. These are
 JavaScript heap/stack controls, not a guarantee on whole-process RSS. JSON
-framing and adapter protocol parsing still occur outside the worker.
+framing and adapter protocol parsing still occur outside the isolated process.
+The bundled MCP may retry one abnormal child-process start or exit inside that
+same deadline because the operation is read-only and deterministic. It does not
+retry timeouts, cancellation, resource exhaustion, invalid results, or any
+semantic failure returned by the core.
 
 ## Agent surface
 
-The repo-owned Codex plugin bundles the MCP server and worker so it does not
-depend on this checkout's `node_modules` at runtime. Its `calculate-schedules`
-Skill routes exact schedule-set questions to one `schedule_run` call and tells
-the Agent not to guess missing horizons, offsets, time-zone ids, recurrence
-bounds, or durations. Natural-language interpretation remains outside the
-deterministic tool.
+The repo-owned Codex plugin bundles the MCP server, Worker, and process entry so
+it does not depend on this checkout's `node_modules` at runtime. The server
+embeds the process entry source and sends it to Node over stdin while request
+JSON travels over a separate pipe, so data is never evaluated as code and
+execution does not depend on a second readable file inside the installed plugin
+cache.
+Its `calculate-schedules` Skill routes exact schedule-set questions to one
+`schedule_run` call and tells the Agent not to guess missing horizons, offsets,
+time-zone ids, recurrence bounds, or durations. Natural-language interpretation
+remains outside the deterministic tool.
 
 ## Layer boundary
 

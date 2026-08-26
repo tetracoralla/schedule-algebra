@@ -8,8 +8,9 @@ not authority. Keep review read-only unless the owner also requests repair.
 1. `src/contract.ts` owns accepted public input and result shapes.
 2. `src/core.ts`, `src/interval-algebra.ts`, and `src/recurrence.ts` own the
    shared limits, interval operations, RRULE expansion, and DST behavior.
-3. `src/executor.ts` owns external-call admission, queueing, worker isolation,
-   deadlines, cancellation, and worker resource limits.
+3. `src/executor.ts` owns external-call admission, queueing, per-call isolation,
+   deadlines, cancellation, and V8 resource limits. Source carriers use a Node
+   Worker; the bundled Codex MCP uses an isolated Node child process.
 4. `src/cli.ts`, `src/mcp.ts`, and `src/http.ts` are adapters around that
    executor; `src/ui/*` owns the human workbench and time canvas.
 5. `plugins/schedule-algebra` owns the bundled Codex runtime and thin routing
@@ -52,7 +53,8 @@ The suite must establish:
 - a real loopback HTTP page, success, invalid request, recovery, and complete
   JSON body inside the response-byte budget;
 - non-JSON rejection, cumulative timeout, cancellation, queue overflow, close,
-  and successful reuse after each applicable worker failure;
+  one bounded abnormal-process retry, and successful reuse after each
+  applicable isolated-execution failure;
 - an isolated copy of the bundled plugin listing one live tool, rejecting an
   invalid call, recovering on a valid call, and requiring no repo dependencies.
 
@@ -76,8 +78,8 @@ For a local installed-host review, also establish all of the following rather
 than inheriting the source result:
 
 - the marketplace is registered and the plugin is installed and enabled;
-- installed manifest, MCP config, Skill, server bundle, and worker bundle match
-  the reviewed source build;
+- installed manifest, MCP config, Skill, server bundle, Worker bundle, and
+  process-entry bundle match the reviewed source build;
 - a fresh Codex task routes an ordinary exact schedule question to
   exactly one `schedule_run` call and returns the exact interval result,
   including when human display labels are not valid technical IDs;

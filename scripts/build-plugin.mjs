@@ -32,16 +32,29 @@ const workerOutput = workerResult.outputFiles?.find((output) => output.path.ends
 if (!workerOutput) throw new Error("worker bundle output is missing");
 await writeFile(fileURLToPath(new URL("worker-entry.mjs", runtimeUrl)), workerOutput.contents);
 
-const workerDataUrl = `data:text/javascript;base64,${Buffer.from(workerOutput.contents).toString("base64")}`;
+const processResult = await build({
+  ...shared,
+  entryPoints: ["src/process-entry.ts"],
+  outfile: fileURLToPath(new URL("process-entry.mjs", runtimeUrl)),
+  write: false,
+});
+const processOutput = processResult.outputFiles?.find((output) =>
+  output.path.endsWith("process-entry.mjs"),
+);
+if (!processOutput) throw new Error("process bundle output is missing");
+await writeFile(fileURLToPath(new URL("process-entry.mjs", runtimeUrl)), processOutput.contents);
+
 const mcpResult = await build({
   ...shared,
   define: {
-    __SCHEDULE_ALGEBRA_WORKER_URL__: JSON.stringify(workerDataUrl),
+    __SCHEDULE_ALGEBRA_PROCESS_SOURCE__: JSON.stringify(
+      Buffer.from(processOutput.contents).toString("utf8"),
+    ),
   },
   entryPoints: ["src/mcp.ts"],
   outfile: fileURLToPath(new URL("schedule-algebra-mcp.mjs", runtimeUrl)),
 });
-const buildResults = [mcpResult, workerResult];
+const buildResults = [mcpResult, workerResult, processResult];
 
 const bundledPackageRoots = new Set();
 for (const result of buildResults) {

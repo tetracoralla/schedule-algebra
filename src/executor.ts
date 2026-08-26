@@ -1,8 +1,11 @@
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { Writable } from "node:stream";
 import { Worker, type ResourceLimits } from "node:worker_threads";
 import type { ScheduleFailure, ScheduleResult } from "./contract.js";
-import { MAX_REQUEST_BYTES } from "./internal-model.js";
+import { MAX_REQUEST_BYTES, MAX_RESPONSE_BYTES } from "./internal-model.js";
 
 declare const __SCHEDULE_ALGEBRA_WORKER_URL__: string;
+declare const __SCHEDULE_ALGEBRA_PROCESS_SOURCE__: string;
 
 const DEFAULT_TIMEOUT_MS = 2_000;
 const DEFAULT_MAX_CONCURRENT = 2;
@@ -18,6 +21,7 @@ export interface ScheduleExecutorOptions {
   maxConcurrent?: number;
   maxQueue?: number;
   resourceLimits?: ResourceLimits;
+  processSource?: string;
   workerUrl?: URL;
 }
 
@@ -42,7 +46,8 @@ export class ScheduleExecutor {
   private readonly maxConcurrent: number;
   private readonly maxQueue: number;
   private readonly resourceLimits: ResourceLimits;
-  private readonly workerUrl: URL;
+  private readonly processSource: string | undefined;
+  private readonly workerUrl: URL | undefined;
   private readonly jobs = new Set<QueueJob>();
   private queue: QueueJob[] = [];
   private active = 0;
@@ -57,7 +62,8 @@ export class ScheduleExecutor {
     );
     this.maxQueue = nonNegativeInteger(options.maxQueue, DEFAULT_MAX_QUEUE, "maxQueue");
     this.resourceLimits = options.resourceLimits ?? DEFAULT_RESOURCE_LIMITS;
-    this.workerUrl = options.workerUrl ?? defaultWorkerUrl();
+    this.processSource = options.processSource ?? (options.workerUrl ? undefined : defaultProcessSource());
+    this.workerUrl = this.processSource === undefined ? (options.workerUrl ?? defaultWorkerUrl()) : undefined;
   }
 
   run(input: unknown, options: ScheduleRunOptions = {}): Promise<ScheduleResult> {
@@ -146,13 +152,22 @@ export class ScheduleExecutor {
 
     job.started = true;
     this.active += 1;
-    void runWorker(
-      job.serialized,
-      this.workerUrl,
-      this.resourceLimits,
-      remainingMs,
-      job.controller.signal,
-    ).then((result) => {
+    const execution = this.processSource === undefined
+      ? runWorker(
+          job.serialized,
+          this.workerUrl as URL,
+          this.resourceLimits,
+          remainingMs,
+          job.controller.signal,
+        )
+      : runProcess(
+          job.serialized,
+          this.processSource,
+          this.resourceLimits,
+          job.deadline,
+          job.controller.signal,
+        );
+    void execution.then((result) => {
       this.complete(job, result);
       this.active -= 1;
       this.pump();
@@ -175,6 +190,173 @@ export class ScheduleExecutor {
     }
     job.resolve(result);
   }
+}
+
+function runProcess(
+  serialized: string,
+  processSource: string,
+  resourceLimits: ResourceLimits,
+  deadline: number,
+  signal: AbortSignal,
+): Promise<ScheduleResult> {
+  return runProcessAttempt(
+    serialized,
+    processSource,
+    resourceLimits,
+    Math.max(1, Math.ceil(deadline - performance.now())),
+    signal,
+  ).then(async (result) => {
+    if (!isRetryableProcessFailure(result) || signal.aborted) return result;
+    const remainingMs = Math.ceil(deadline - performance.now());
+    if (remainingMs <= 0) {
+      return failure("EXECUTION_TIMEOUT", "schedule execution exceeded its deadline");
+    }
+    operatorDiagnostic("process retry", "retrying one abnormal installed-process exit");
+    return runProcessAttempt(serialized, processSource, resourceLimits, remainingMs, signal);
+  });
+}
+
+function runProcessAttempt(
+  serialized: string,
+  processSource: string,
+  resourceLimits: ResourceLimits,
+  timeoutMs: number,
+  signal: AbortSignal,
+): Promise<ScheduleResult> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeout: NodeJS.Timeout | undefined;
+    let child: ChildProcessWithoutNullStreams;
+    let stdoutBytes = 0;
+    const stdoutChunks: Buffer[] = [];
+    let stderr = "";
+
+    const finish = (result: ScheduleResult, terminate = false) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
+      signal.removeEventListener("abort", onAbort);
+      if (terminate && !child.killed) child.kill("SIGKILL");
+      resolve(result);
+    };
+    const onAbort = () =>
+      finish(failure("EXECUTION_CANCELLED", "schedule execution was cancelled"), true);
+
+    try {
+      child = spawn(process.execPath, processResourceArgs(resourceLimits), {
+        stdio: ["pipe", "pipe", "pipe", "pipe"],
+        windowsHide: true,
+      });
+    } catch (error) {
+      operatorDiagnostic("process start failed", error);
+      resolve(failure("EXECUTION_FAILED", "schedule process failed to start"));
+      return;
+    }
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      if (settled) return;
+      stdoutBytes += chunk.byteLength;
+      if (stdoutBytes > MAX_RESPONSE_BYTES) {
+        operatorDiagnostic("process output failed", "response exceeded the configured byte limit");
+        finish(failure("EXECUTION_FAILED", "schedule process returned an invalid result"), true);
+        return;
+      }
+      stdoutChunks.push(chunk);
+    });
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => {
+      if (stderr.length < 8_192) stderr += chunk.slice(0, 8_192 - stderr.length);
+    });
+    child.stdin.on("error", () => undefined);
+    const inputStream = child.stdio[3] as Writable | null;
+    if (!inputStream) {
+      operatorDiagnostic("process start failed", "dedicated input pipe is unavailable");
+      finish(failure("EXECUTION_FAILED", "schedule process failed to start"), true);
+      return;
+    }
+    inputStream.on("error", () => undefined);
+    child.once("error", (error) => {
+      operatorDiagnostic("process error", error);
+      finish(failure("EXECUTION_FAILED", "schedule process failed"), true);
+    });
+    child.once("close", (code, processSignal) => {
+      if (settled) return;
+      if (code !== 0) {
+        operatorDiagnostic(
+          "process exit failed",
+          `${stderr || "no stderr"}; code=${String(code)}; signal=${String(processSignal)}`,
+        );
+        const resourceLimit = /heap out of memory|allocation failed/i.test(stderr);
+        finish(
+          failure(
+            resourceLimit ? "EXECUTION_RESOURCE_LIMIT" : "EXECUTION_FAILED",
+            resourceLimit
+              ? "schedule execution exceeded its memory limit"
+              : "schedule process exited before returning a result",
+          ),
+        );
+        return;
+      }
+      try {
+        const result = scheduleResultFromUnknown(
+          JSON.parse(Buffer.concat(stdoutChunks).toString("utf8")),
+        );
+        if (!result) throw new Error("isolated process returned a non-result JSON value");
+        finish(result);
+      } catch (error) {
+        operatorDiagnostic("process result failed", error);
+        finish(failure("EXECUTION_FAILED", "schedule process returned an invalid result"));
+      }
+    });
+    signal.addEventListener("abort", onAbort, { once: true });
+    timeout = setTimeout(
+      () => finish(failure("EXECUTION_TIMEOUT", "schedule execution exceeded its deadline"), true),
+      timeoutMs,
+    );
+    child.stdin.end(processSource);
+    inputStream.end(serialized);
+  });
+}
+
+function isRetryableProcessFailure(result: ScheduleResult): boolean {
+  return (
+    !result.ok &&
+    result.error.code === "EXECUTION_FAILED" &&
+    [
+      "schedule process failed to start",
+      "schedule process failed",
+      "schedule process exited before returning a result",
+    ].includes(result.error.message)
+  );
+}
+
+function scheduleResultFromUnknown(value: unknown): ScheduleResult | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (record.ok === true && typeof record.operation === "string" && Array.isArray(record.intervals)) {
+    return value as ScheduleResult;
+  }
+  if (record.ok !== false || !record.error || typeof record.error !== "object") return undefined;
+  const error = record.error as Record<string, unknown>;
+  return typeof error.code === "string" && typeof error.message === "string"
+    ? (value as ScheduleResult)
+    : undefined;
+}
+
+function processResourceArgs(resourceLimits: ResourceLimits): string[] {
+  const args: string[] = [];
+  if (resourceLimits.maxOldGenerationSizeMb !== undefined) {
+    args.push(`--max-old-space-size=${Math.max(1, Math.floor(resourceLimits.maxOldGenerationSizeMb))}`);
+  }
+  if (resourceLimits.maxYoungGenerationSizeMb !== undefined) {
+    args.push(
+      `--max-semi-space-size=${Math.max(1, Math.floor(resourceLimits.maxYoungGenerationSizeMb / 2))}`,
+    );
+  }
+  if (resourceLimits.stackSizeMb !== undefined) {
+    args.push(`--stack-size=${Math.max(1, Math.floor(resourceLimits.stackSizeMb * 1_024))}`);
+  }
+  args.push("--input-type=module");
+  return args;
 }
 
 function runWorker(
@@ -249,6 +431,18 @@ function defaultWorkerUrl(): URL {
   }
   const entry = import.meta.url.endsWith(".mjs") ? "./worker-entry.mjs" : "./worker-entry.js";
   return new URL(entry, import.meta.url);
+}
+
+function defaultProcessSource(): string | undefined {
+  if (typeof __SCHEDULE_ALGEBRA_PROCESS_SOURCE__ === "string") {
+    return __SCHEDULE_ALGEBRA_PROCESS_SOURCE__;
+  }
+  return undefined;
+}
+
+function operatorDiagnostic(context: string, error: unknown): void {
+  const diagnostic = error instanceof Error ? (error.stack ?? error.message) : String(error);
+  process.stderr.write(`[schedule-algebra] ${context}: ${diagnostic.slice(0, 8_192)}\n`);
 }
 
 function positiveInteger(value: number | undefined, fallback: number, name: string): number {

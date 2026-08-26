@@ -20,6 +20,7 @@ const required = [
   "src/recurrence.ts",
   "src/executor.ts",
   "src/response-budget.ts",
+  "src/process-entry.ts",
   "src/worker-entry.ts",
   "src/cli.ts",
   "src/mcp.ts",
@@ -37,6 +38,7 @@ const required = [
   "plugins/schedule-algebra/.mcp.json",
   "plugins/schedule-algebra/skills/calculate-schedules/SKILL.md",
   "plugins/schedule-algebra/runtime/schedule-algebra-mcp.mjs",
+  "plugins/schedule-algebra/runtime/process-entry.mjs",
   "plugins/schedule-algebra/runtime/worker-entry.mjs",
   "plugins/schedule-algebra/LICENSE",
   "plugins/schedule-algebra/NOTICE",
@@ -90,7 +92,13 @@ for (const adapter of externalAdapters) {
   }
 }
 const executor = await readFile("src/executor.ts", "utf8");
-for (const invariant of ["new Worker", "resourceLimits", "EXECUTION_TIMEOUT", "SERVER_BUSY"]) {
+for (const invariant of [
+  "new Worker",
+  "spawn(process.execPath",
+  "resourceLimits",
+  "EXECUTION_TIMEOUT",
+  "SERVER_BUSY",
+]) {
   if (!executor.includes(invariant)) {
     throw new Error(`executor boundary lost required invariant: ${invariant}`);
   }

@@ -51,16 +51,17 @@ It exposes one read-only tool, `schedule_run`. See
 ## Codex plugin
 
 The repository contains a self-contained plugin with one thin Skill and a
-bundled MCP runtime. After `npm run check`, register the clone as a local
-marketplace and install the plugin:
+bundled MCP runtime. Install the reviewed release from its immutable tag:
 
 ```sh
-codex plugin marketplace add . --json
+codex plugin marketplace add https://github.com/tetracoralla/schedule-algebra.git --ref v0.1.5 --json
 codex plugin add schedule-algebra@schedule-algebra --json
 ```
 
 Open a fresh Codex task after installation. The bundled runtime does not depend
-on this checkout's `node_modules`.
+on another checkout's `node_modules`. Contributors can instead register the
+current clone with `codex plugin marketplace add . --json` after running
+`npm run check`.
 
 ## Performance baseline
 

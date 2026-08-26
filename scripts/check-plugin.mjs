@@ -32,6 +32,7 @@ assert.equal(marketplace.name, "schedule-algebra");
 assert.equal(marketplace.plugins?.[0]?.source?.path, "./plugins/schedule-algebra");
 await access(resolve(pluginRoot, "runtime/schedule-algebra-mcp.mjs"));
 await access(resolve(pluginRoot, "runtime/worker-entry.mjs"));
+await access(resolve(pluginRoot, "runtime/process-entry.mjs"));
 for (const legalFile of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]) {
   assert.equal(
     await readFile(resolve(pluginRoot, legalFile), "utf8"),
@@ -43,7 +44,10 @@ const temporaryRoot = await mkdtemp(join(tmpdir(), "schedule-algebra-plugin-chec
 const isolatedPlugin = resolve(temporaryRoot, "schedule-algebra");
 try {
   await cp(pluginRoot, isolatedPlugin, { recursive: true });
-  await rm(resolve(isolatedPlugin, "runtime/worker-entry.mjs"));
+  await Promise.all([
+    rm(resolve(isolatedPlugin, "runtime/worker-entry.mjs")),
+    rm(resolve(isolatedPlugin, "runtime/process-entry.mjs")),
+  ]);
   const transport = new StdioClientTransport({
     command: "node",
     args: ["runtime/schedule-algebra-mcp.mjs"],
