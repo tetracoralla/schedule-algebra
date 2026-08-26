@@ -17,7 +17,7 @@ const skill = await readFile(
 );
 
 assert.equal(manifest.name, "schedule-algebra");
-assert.equal(manifest.license, "UNLICENSED");
+assert.equal(manifest.license, "Apache-2.0");
 assert.deepEqual(mcp.mcpServers?.["schedule-algebra"]?.args, ["runtime/schedule-algebra-mcp.mjs"]);
 assert.match(skill, /Do not derive the horizon from interval endpoints/);
 assert.match(skill, /`COUNT` or `UNTIL` does not replace `maxOccurrences`/);
@@ -33,6 +33,12 @@ if (!process.argv[2]) {
 }
 await access(resolve(pluginRoot, "runtime/schedule-algebra-mcp.mjs"));
 await access(resolve(pluginRoot, "runtime/worker-entry.mjs"));
+for (const legalFile of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]) {
+  assert.equal(
+    await readFile(resolve(pluginRoot, legalFile), "utf8"),
+    await readFile(resolve(root, legalFile), "utf8"),
+  );
+}
 
 const temporaryRoot = await mkdtemp(join(tmpdir(), "schedule-algebra-plugin-check-"));
 const isolatedPlugin = resolve(temporaryRoot, "schedule-algebra");

@@ -3,6 +3,13 @@ import { readFile, stat } from "node:fs/promises";
 const required = [
   "AGENTS.md",
   "README.md",
+  "LICENSE",
+  "NOTICE",
+  "THIRD_PARTY_NOTICES.md",
+  "CONTRIBUTING.md",
+  "SECURITY.md",
+  ".github/workflows/ci.yml",
+  ".github/dependabot.yml",
   "docs/PRODUCT_MODEL.md",
   "docs/REVIEW_CONTRACT.md",
   "src/core.ts",
@@ -31,13 +38,31 @@ const required = [
   "plugins/schedule-algebra/skills/calculate-schedules/SKILL.md",
   "plugins/schedule-algebra/runtime/schedule-algebra-mcp.mjs",
   "plugins/schedule-algebra/runtime/worker-entry.mjs",
+  "plugins/schedule-algebra/LICENSE",
+  "plugins/schedule-algebra/NOTICE",
+  "plugins/schedule-algebra/THIRD_PARTY_NOTICES.md",
   ".agents/plugins/marketplace.json",
 ];
 for (const file of required) await stat(file);
 
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
-if (packageJson.private !== true || packageJson.license !== "UNLICENSED") {
-  throw new Error("MVP must remain private and UNLICENSED until the owner chooses release terms");
+if (packageJson.private !== true || packageJson.license !== "Apache-2.0") {
+  throw new Error("source is Apache-2.0; the package remains private to prevent accidental npm publication");
+}
+if (packageJson.author?.name !== "openAdam") {
+  throw new Error("public package attribution must name openAdam");
+}
+if (packageJson.repository?.url !== "https://github.com/tetracoralla/schedule-algebra.git") {
+  throw new Error("public repository identity drifted");
+}
+const thirdPartyNotices = await readFile("THIRD_PARTY_NOTICES.md", "utf8");
+for (const bundledInstance of [
+  "## zod-to-json-schema@3.24.6",
+  "## zod-to-json-schema@3.25.2",
+]) {
+  if (!thirdPartyNotices.includes(bundledInstance)) {
+    throw new Error(`third-party notices lost a bundled package instance: ${bundledInstance}`);
+  }
 }
 const mcp = await readFile("src/mcp.ts", "utf8");
 if ((mcp.match(/name: "schedule_run"/g) ?? []).length !== 1) {

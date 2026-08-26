@@ -2,7 +2,19 @@
   "name": "schedule-algebra",
   "version": "0.1.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "openAdam",
+    "url": "https://github.com/tetracoralla"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tetracoralla/schedule-algebra.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tetracoralla/schedule-algebra/issues"
+  },
+  "homepage": "https://github.com/tetracoralla/schedule-algebra#readme",
   "type": "module",
   "description": "Bounded interval and recurrence algebra for humans and Agents.",
   "bin": {
@@ -11,7 +23,10 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
     "build": "npm run build:ts && npm run build:plugin",

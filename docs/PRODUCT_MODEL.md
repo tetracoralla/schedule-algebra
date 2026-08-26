@@ -14,6 +14,20 @@ The shared deterministic core powers the library, CLI, stdio MCP server, and
 loopback HTTP/UI adapter. The product does not define a provider-neutral
 Capability or Procedure Profile in v0.1.
 
+## Public identity and distribution
+
+- The human product name is **Schedule Algebra** and the repository slug is
+  `schedule-algebra`.
+- The stable executable names are `schedule-algebra` and
+  `schedule-algebra-mcp`; the Codex plugin id is `schedule-algebra` and its one
+  MCP tool remains `schedule_run`.
+- openAdam is the author and the source and bundled plugin are licensed under
+  Apache-2.0.
+- The v0.1 public artifacts are the GitHub source repository and its
+  self-contained Codex plugin directory. No npm publication is promised;
+  `private: true` prevents accidental registry publication.
+- Node.js 22 or newer is the supported runtime.
+
 The human surface is not a calendar account or month-view product. A month grid
 would hide sub-day boundaries and imply navigation, event creation, search, and
 provider state that do not exist here. The time canvas instead scales the

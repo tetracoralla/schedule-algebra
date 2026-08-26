@@ -59,6 +59,19 @@ The suite must establish:
 The performance command is not part of `npm run check` and has no PASS
 threshold. Record its machine/runtime context and current output as a baseline.
 
+For a public source or plugin release, also establish:
+
+- root `LICENSE`, `NOTICE`, and `THIRD_PARTY_NOTICES.md` agree with the
+  Apache-2.0 package metadata and openAdam attribution;
+- the installable plugin root carries byte-identical copies of those three
+  legal files alongside its prebuilt runtime;
+- the third-party notice inventory is regenerated from the exact package inputs
+  bundled by esbuild rather than a handwritten dependency shortlist;
+- a clean checkout can run `npm ci` and `npm run check` without another source
+  checkout, an installed plugin cache, or untracked files;
+- GitHub remote state, CI, security controls, release assets, and public
+  re-acquisition remain BLOCKED until the repository is actually published.
+
 For a local installed-host review, also establish all of the following rather
 than inheriting the source result:
 

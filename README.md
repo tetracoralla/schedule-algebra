@@ -1,14 +1,24 @@
 # Schedule Algebra
 
 Bounded interval and zoned-recurrence set algebra for humans and AI Agents.
-The MVP is private and `UNLICENSED`; no release terms have been chosen.
 
-## Run
+Schedule Algebra answers one deterministic question: which exact instant
+intervals remain after union, intersection, difference, gap, or real-overlap
+operations over explicit schedules? The same core powers the library, CLI,
+stdio MCP server, Codex plugin, and local web workbench.
+
+It deliberately does not parse natural-language dates, connect calendar
+accounts, recommend meetings, book events, infer holidays, or run background
+jobs. See [the product model](docs/PRODUCT_MODEL.md) for the complete boundary.
+
+## Run from source
 
 Requires Node.js 22 or newer.
 
 ```sh
-npm install
+git clone https://github.com/tetracoralla/schedule-algebra.git
+cd schedule-algebra
+npm ci
 npm run check
 ```
 
@@ -38,18 +48,19 @@ It exposes one read-only tool, `schedule_run`. See
 [`docs/PRODUCT_MODEL.md`](docs/PRODUCT_MODEL.md) for exact semantics and
 [`docs/REVIEW_CONTRACT.md`](docs/REVIEW_CONTRACT.md) for rerunnable checks.
 
-## Local Codex plugin
+## Codex plugin
 
-The repository contains a self-contained private plugin with one thin Skill and
-the bundled MCP runtime. After `npm run check`, register and install it locally:
+The repository contains a self-contained plugin with one thin Skill and a
+bundled MCP runtime. After `npm run check`, register the clone as a local
+marketplace and install the plugin:
 
 ```sh
 codex plugin marketplace add . --json
 codex plugin add schedule-algebra@schedule-algebra --json
 ```
 
-Open a fresh Codex task after installation. The plugin remains private and
-`UNLICENSED`; these commands do not publish it.
+Open a fresh Codex task after installation. The bundled runtime does not depend
+on this checkout's `node_modules`.
 
 ## Performance baseline
 
@@ -61,3 +72,18 @@ npm run measure:baseline
 
 The output labels itself `baseline-only-no-slo` and reports core, isolated
 worker, bounded burst/recovery, loopback HTTP, and payload-size observations.
+
+## Distribution
+
+The repository is source-licensed under Apache-2.0. `package.json` remains
+`private: true` to prevent accidental npm publication; no npm package is part
+of the v0.1 release contract. The installable Codex plugin carries its own
+copies of the project license, NOTICE, and third-party notices.
+
+## License
+
+Copyright 2026 openAdam.
+
+Schedule Algebra is licensed under the [Apache License 2.0](LICENSE).
+Third-party attribution and license texts are listed in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
