@@ -32,4 +32,4 @@ await Promise.all([
   }),
 ]);
 
-process.stdout.write("plugin runtime bundle: PASS\n");
+process.stdout.write("plugin runtime bundle: built\n");

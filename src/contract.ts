@@ -20,7 +20,10 @@ const StableIdSchema = z
   .string()
   .min(1)
   .max(80)
-  .regex(/^[A-Za-z0-9._-]+$/, "must use letters, numbers, dot, underscore, or hyphen");
+  .regex(/^[A-Za-z0-9._-]+$/, "must use letters, numbers, dot, underscore, or hyphen")
+  .describe(
+    "Stable ASCII technical identifier using only letters, numbers, dot, underscore, or hyphen; do not copy a human display label containing spaces or non-ASCII characters",
+  );
 
 export const IntervalInputSchema = z
   .object({
@@ -57,22 +60,22 @@ export const ScheduleInputSchema = z
     }
     const ids = new Set<string>();
     for (const [index, interval] of (value.intervals ?? []).entries()) {
-      if (!interval.id) continue;
-      if (ids.has(interval.id)) {
+      const id = interval.id ?? `item-${index + 1}`;
+      if (ids.has(id)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["intervals", index, "id"],
-          message: "item ids must be unique within a schedule",
+          message: "resolved item ids must be unique within a schedule",
         });
       }
-      ids.add(interval.id);
+      ids.add(id);
     }
     for (const [index, recurrence] of (value.recurrences ?? []).entries()) {
       if (ids.has(recurrence.id)) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["recurrences", index, "id"],
-          message: "item ids must be unique within a schedule",
+          message: "resolved item ids must be unique within a schedule",
         });
       }
       ids.add(recurrence.id);

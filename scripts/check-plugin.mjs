@@ -11,10 +11,17 @@ const pluginRoot = process.argv[2]
   : resolve(root, "plugins/schedule-algebra");
 const manifest = JSON.parse(await readFile(resolve(pluginRoot, ".codex-plugin/plugin.json"), "utf8"));
 const mcp = JSON.parse(await readFile(resolve(pluginRoot, ".mcp.json"), "utf8"));
+const skill = await readFile(
+  resolve(pluginRoot, "skills/calculate-schedules/SKILL.md"),
+  "utf8",
+);
 
 assert.equal(manifest.name, "schedule-algebra");
 assert.equal(manifest.license, "UNLICENSED");
 assert.deepEqual(mcp.mcpServers?.["schedule-algebra"]?.args, ["runtime/schedule-algebra-mcp.mjs"]);
+assert.match(skill, /Do not derive the horizon from interval endpoints/);
+assert.match(skill, /`COUNT` or `UNTIL` does not replace `maxOccurrences`/);
+assert.match(skill, /Make no `schedule_run` call and do not calculate or infer an answer/);
 if (!process.argv[2]) {
   const marketplace = JSON.parse(
     await readFile(resolve(root, ".agents/plugins/marketplace.json"), "utf8"),
@@ -44,6 +51,10 @@ try {
     assert.equal(tools.tools.length, 1);
     assert.equal(tools.tools[0]?.name, "schedule_run");
     assert.equal(tools.tools[0]?.inputSchema.additionalProperties, false);
+    assert.match(
+      tools.tools[0]?.inputSchema.properties?.schedules?.items?.properties?.id?.description ?? "",
+      /ASCII technical identifier/,
+    );
     const result = await client.callTool({
       name: "schedule_run",
       arguments: {

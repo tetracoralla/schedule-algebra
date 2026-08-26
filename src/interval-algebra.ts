@@ -20,14 +20,17 @@ export function executeOperation(
     case "union":
       return normalize(schedules.flatMap((schedule) => schedule.normalized));
     case "intersection":
-      return schedules.slice(1).reduce(
-        (current, schedule) => intersectTwo(current, schedule.normalized),
-        schedules[0]?.normalized ?? [],
+      return attachContributors(
+        schedules.slice(1).reduce(
+          (current, schedule) => intersectTwo(current, schedule.normalized),
+          schedules[0]?.normalized ?? [],
+        ),
+        schedules.flatMap((schedule) => schedule.raw),
       );
     case "difference":
-      return subtract(
-        schedules[0]?.normalized ?? [],
-        schedules[1]?.normalized ?? [],
+      return attachContributors(
+        subtract(schedules[0]?.normalized ?? [], schedules[1]?.normalized ?? []),
+        schedules[0]?.raw ?? [],
       );
     case "gaps":
       return complement(
@@ -37,6 +40,20 @@ export function executeOperation(
     case "overlaps":
       return overlapSegments(schedules.flatMap((schedule) => schedule.raw));
   }
+}
+
+function attachContributors(
+  intervals: InternalInterval[],
+  sourceIntervals: InternalInterval[],
+): InternalInterval[] {
+  return intervals.map((interval) => {
+    const sources = new Set<string>();
+    for (const sourceInterval of sourceIntervals) {
+      if (sourceInterval.start >= interval.end || sourceInterval.end <= interval.start) continue;
+      for (const source of sourceInterval.sources) sources.add(source);
+    }
+    return { start: interval.start, end: interval.end, sources };
+  });
 }
 
 export function normalize(intervals: InternalInterval[]): InternalInterval[] {

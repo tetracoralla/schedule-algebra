@@ -7,7 +7,10 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { ScheduleRequestSchema } from "./contract.js";
+import type { ScheduleResult } from "./contract.js";
 import { ScheduleExecutor } from "./executor.js";
+import { MAX_RESPONSE_BYTES } from "./internal-model.js";
+import { outputLimitFailure } from "./response-budget.js";
 
 const inputSchema = zodToJsonSchema(ScheduleRequestSchema, {
   $refStrategy: "none",
@@ -46,6 +49,26 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     };
   }
   const result = await executor.run(request.params.arguments, { signal: extra.signal });
+  const response = toolResponse(result);
+  const wireBytes = jsonRpcLineBytes(response);
+  if (wireBytes > MAX_RESPONSE_BYTES) {
+    return toolResponse(outputLimitFailure(wireBytes));
+  }
+  return response;
+});
+
+function jsonRpcLineBytes(response: unknown): number {
+  // The stdio transport frames each result as one JSON-RPC line, so the
+  // budget must cover the complete line rather than the tool envelope alone.
+  // The handler never sees the request id, so budget a 10-digit numeric id
+  // as its worst case.
+  return Buffer.byteLength(
+    `${JSON.stringify({ jsonrpc: "2.0", id: 1234567890, result: response })}\n`,
+    "utf8",
+  );
+}
+
+function toolResponse(result: ScheduleResult) {
   return {
     isError: !result.ok,
     structuredContent: result as unknown as Record<string, unknown>,
@@ -58,7 +81,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       },
     ],
   };
-});
+}
 
 await server.connect(new StdioServerTransport());
 

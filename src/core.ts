@@ -50,7 +50,9 @@ export function runSchedule(input: unknown): ScheduleResult {
       warnings: new Set<string>(),
       totalGenerated: 0,
     };
-    const schedules = request.schedules.map((schedule) => expandSchedule(schedule, context));
+    const schedules = request.schedules.map((schedule, index) =>
+      expandSchedule(schedule, index, context),
+    );
     const intervals = executeOperation(request.operation, schedules, horizon);
     if (intervals.length > request.maxResultIntervals) {
       throw new ScheduleError(
@@ -93,10 +95,14 @@ export function runSchedule(input: unknown): ScheduleResult {
 
     const responseBytes = Buffer.byteLength(JSON.stringify(result), "utf8");
     if (responseBytes > MAX_RESPONSE_BYTES) {
-      throw new ScheduleError("OUTPUT_LIMIT", "response exceeds 524288 UTF-8 bytes", {
-        responseBytes,
-        limitBytes: MAX_RESPONSE_BYTES,
-      });
+      throw new ScheduleError(
+        "OUTPUT_LIMIT",
+        `response exceeds ${MAX_RESPONSE_BYTES} UTF-8 bytes`,
+        {
+          responseBytes,
+          limitBytes: MAX_RESPONSE_BYTES,
+        },
+      );
     }
     return result;
   } catch (error) {
@@ -140,10 +146,9 @@ function parseHorizon(request: ScheduleRequest): InternalInterval {
   const start = parseInstant(request.horizon.start, "horizon.start");
   const end = parseInstant(request.horizon.end, "horizon.end");
   if (end <= start) {
-    throw new ScheduleError(
-      "INVALID_INTERVAL",
-      "horizon must be a positive half-open interval",
-    );
+    throw new ScheduleError("INVALID_INTERVAL", "horizon must be a positive half-open interval", [
+      { path: "horizon.end", message: "must be after the horizon start" },
+    ]);
   }
   if (end - start > MAX_HORIZON_NS) {
     throw new ScheduleError("LIMIT_EXCEEDED", "horizon cannot exceed 366 elapsed days");
@@ -153,6 +158,7 @@ function parseHorizon(request: ScheduleRequest): InternalInterval {
 
 function expandSchedule(
   schedule: ScheduleRequest["schedules"][number],
+  scheduleIndex: number,
   context: ExpansionContext,
 ): ExpandedSchedule {
   const raw: InternalInterval[] = [];
@@ -163,6 +169,7 @@ function expandSchedule(
       throw new ScheduleError(
         "INVALID_INTERVAL",
         `${schedule.id}.intervals.${index} must have end after start`,
+        [{ path: `schedules.${scheduleIndex}.intervals.${index}.end`, message: "must be after the interval start" }],
       );
     }
     const clipped = clipInterval(

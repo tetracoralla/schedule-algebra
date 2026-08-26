@@ -29,6 +29,7 @@ export function expandRecurrence(
   context: ExpansionContext,
 ): InternalInterval[] {
   const source = `${scheduleId}/recurrence/${recurrence.id}`;
+  assertIanaTimeZone(recurrence.timeZone, source);
   const dtstart = parseLocalDateTime(recurrence.dtstart, source);
   const dtstartResolution = resolveLocal(dtstart, recurrence.timeZone, source);
   if (dtstartResolution.fold) {
@@ -128,6 +129,17 @@ export function expandRecurrence(
       ),
   });
   return intervals;
+}
+
+function assertIanaTimeZone(timeZone: string, source: string): void {
+  if (timeZone.startsWith("+") || timeZone.startsWith("-")) {
+    throw new ScheduleError("INVALID_TIME_ZONE", `${source} has an invalid IANA time zone`);
+  }
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).resolvedOptions().timeZone;
+  } catch {
+    throw new ScheduleError("INVALID_TIME_ZONE", `${source} has an invalid IANA time zone`);
+  }
 }
 
 function normalizeRRule(

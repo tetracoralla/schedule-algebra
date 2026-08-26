@@ -1,4 +1,5 @@
 import type { ScheduleFailure, ScheduleSuccess } from "../contract.js";
+import { durationNanoseconds, formatDurationNanoseconds } from "./instant.js";
 import type { WorkspaceDraft } from "./types.js";
 
 export function renderSuccess(panel: HTMLElement, result: ScheduleSuccess, request: WorkspaceDraft): void {
@@ -17,7 +18,7 @@ export function renderSuccess(panel: HTMLElement, result: ScheduleSuccess, reque
   const summary = element("div", "summary-grid");
   summary.append(
     summaryItem(String(result.intervals.length), "Intervals"),
-    summaryItem(formatDuration(totalMilliseconds(result)), "Covered"),
+    summaryItem(formatDurationNanoseconds(totalNanoseconds(result)), "Covered"),
     summaryItem(result.truncated ? "Yes" : "No", "Recurrence clipped"),
   );
 
@@ -72,7 +73,7 @@ function intervalSection(result: ScheduleSuccess): HTMLElement {
     time.textContent = `${interval.start} → ${interval.end}`;
     const meta = element("div", "interval-meta");
     const duration = document.createElement("span");
-    duration.textContent = formatDuration(Date.parse(interval.end) - Date.parse(interval.start));
+    duration.textContent = formatDurationNanoseconds(durationNanoseconds(interval.start, interval.end));
     meta.append(duration);
     for (const source of interval.sources) {
       const chip = element("span", "source-chip");
@@ -169,23 +170,11 @@ function copyButton(label: string, value: string): HTMLButtonElement {
   return button;
 }
 
-function totalMilliseconds(result: ScheduleSuccess): number {
+function totalNanoseconds(result: ScheduleSuccess): bigint {
   return result.intervals.reduce(
-    (total, interval) => total + (Date.parse(interval.end) - Date.parse(interval.start)),
-    0,
+    (total, interval) => total + durationNanoseconds(interval.start, interval.end),
+    0n,
   );
-}
-
-function formatDuration(milliseconds: number): string {
-  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return "0s";
-  const totalSeconds = Math.round(milliseconds / 1000);
-  const days = Math.floor(totalSeconds / 86_400);
-  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
-  const minutes = Math.floor((totalSeconds % 3_600) / 60);
-  const seconds = totalSeconds % 60;
-  return [days ? `${days}d` : "", hours ? `${hours}h` : "", minutes ? `${minutes}m` : "", seconds ? `${seconds}s` : ""]
-    .filter(Boolean)
-    .join(" ");
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string): HTMLElementTagNameMap[K] {

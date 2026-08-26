@@ -12,13 +12,20 @@ Use the deterministic runtime when the requested output is a set of exact instan
 - Call `schedule_run` directly. Do not list MCP resources or templates; this plugin exposes none.
 - Use one call for the complete operation. Do not expand recurrences or redo interval arithmetic in model reasoning before or after a successful call.
 - Choose the operation from the user's requested set relationship. If the relationship is genuinely ambiguous, ask before calling.
-- Preserve every supplied instant, local start, time-zone id, rule, duration, identifier, and bound exactly. Ask for any missing fact that changes the result; never guess it.
+- Preserve every supplied instant, local start, time-zone id, rule, duration, identifier, and bound exactly.
+- Treat `id` fields as ASCII technical correlation keys, not display labels. When the user gives labels but no explicit technical IDs, assign schedules `schedule-1`, `schedule-2`, and so on in input order; omit optional interval IDs so the runtime assigns `item-1`, `item-2`, and so on; assign required recurrence IDs `recurrence-1`, `recurrence-2`, and so on. Keep a local mapping so the answer can relate returned sources back to the user's labels. Never put spaces, non-ASCII text, or `/` in an ID.
+
+## Verify required facts before calling
+
+- Every operation requires an explicit horizon supplied as a distinct user fact. Do not derive the horizon from interval endpoints, recurrence bounds, or the visible data range.
+- Every recurrence requires an explicit local `dtstart`, IANA `timeZone`, RRULE bounded by `COUNT` or UTC `UNTIL`, positive `durationSeconds`, and positive `maxOccurrences`. The RRULE bound and `maxOccurrences` are independent; `COUNT` or `UNTIL` does not replace `maxOccurrences`.
+- If any required fact is absent or ambiguous, ask for all missing facts in one clarification and end the turn. Make no `schedule_run` call and do not calculate or infer an answer.
 
 ## Keep the boundary honest
 
 - Use Migratory Time for civil-time lookup or conversion and Equatorium for structural RRULE interpretation. Schedule Algebra owns bounded occurrence execution and interval set algebra.
 - Do not use this tool for natural-language planning, holiday inference, calendar accounts, meeting selection, reminders, booking, or background work.
-- A structured error means the calculation did not produce a negative or empty answer. Correct the explicit input or ask for the missing choice instead of replacing the error with model reasoning.
+- A structured error means the calculation did not produce a negative or empty answer. Do not inspect repository source, manually calculate, or present an inferred result after an error. Correct only a mechanically invalid generated technical ID; otherwise report the error or ask for the missing choice.
 
 ## Present the result
 

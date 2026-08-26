@@ -1,4 +1,5 @@
 import type { ScheduleSuccess } from "../contract.js";
+import { epochMilliseconds, parseRfc3339Nanoseconds, percentage } from "./instant.js";
 import type { IntervalDraft, ScheduleDraft, WorkspaceDraft } from "./types.js";
 
 const TICK_FRACTIONS = [0, 0.5, 1] as const;
@@ -15,9 +16,9 @@ export function renderTimeCanvas(
   if (result) legend.append(legendItem("result", "Result"));
 
   rangeLabel.textContent = `${request.horizon.start || "Start"} → ${request.horizon.end || "End"}`;
-  const horizonStart = Date.parse(request.horizon.start);
-  const horizonEnd = Date.parse(request.horizon.end);
-  if (!Number.isFinite(horizonStart) || !Number.isFinite(horizonEnd) || horizonEnd <= horizonStart) {
+  const horizonStart = parseRfc3339Nanoseconds(request.horizon.start);
+  const horizonEnd = parseRfc3339Nanoseconds(request.horizon.end);
+  if (horizonStart === undefined || horizonEnd === undefined || horizonEnd <= horizonStart) {
     const message = element("p", "canvas-message");
     message.textContent = "Enter a valid horizon to place intervals on the canvas.";
     canvas.append(message);
@@ -31,7 +32,7 @@ export function renderTimeCanvas(
   if (result) canvas.append(resultLane(result, horizonStart, horizonEnd));
 }
 
-function axis(start: number, end: number): HTMLElement {
+function axis(start: bigint, end: bigint): HTMLElement {
   const row = element("div", "time-axis");
   const zone = element("span", "axis-zone");
   zone.textContent = "UTC";
@@ -40,7 +41,8 @@ function axis(start: number, end: number): HTMLElement {
     const tick = element("span", "axis-tick");
     tick.style.left = `${fraction * 100}%`;
     tick.dataset.edge = fraction === 0 ? "start" : fraction === 1 ? "end" : "middle";
-    tick.textContent = formatTick(start + (end - start) * fraction, end - start);
+    const position = fraction === 0 ? start : fraction === 1 ? end : start + (end - start) / 2n;
+    tick.textContent = formatTick(position, end - start);
     track.append(tick);
   }
   row.append(zone, track);
@@ -50,8 +52,8 @@ function axis(start: number, end: number): HTMLElement {
 function scheduleLane(
   schedule: ScheduleDraft,
   index: number,
-  horizonStart: number,
-  horizonEnd: number,
+  horizonStart: bigint,
+  horizonEnd: bigint,
 ): HTMLElement {
   const visible = schedule.intervals.filter((interval) => overlapsHorizon(interval, horizonStart, horizonEnd));
   const recurrenceCount = schedule.recurrences.length;
@@ -75,8 +77,8 @@ function scheduleLane(
 
 function resultLane(
   result: ScheduleSuccess,
-  horizonStart: number,
-  horizonEnd: number,
+  horizonStart: bigint,
+  horizonEnd: bigint,
 ): HTMLElement {
   const label = `${capitalize(result.operation)} result`;
   const count = result.intervals.length;
@@ -94,8 +96,8 @@ function lane(
   name: string,
   meta: string,
   intervals: Array<Pick<IntervalDraft, "start" | "end">>,
-  horizonStart: number,
-  horizonEnd: number,
+  horizonStart: bigint,
+  horizonEnd: bigint,
   variant: string,
 ): HTMLElement {
   const row = element("div", `canvas-lane ${variant}`);
@@ -111,17 +113,17 @@ function lane(
   track.setAttribute("aria-label", `${name}: ${meta}`);
   const span = horizonEnd - horizonStart;
   for (const [index, interval] of intervals.entries()) {
-    const intervalStart = Date.parse(interval.start);
-    const intervalEnd = Date.parse(interval.end);
-    if (!Number.isFinite(intervalStart) || !Number.isFinite(intervalEnd) || intervalEnd <= intervalStart) {
+    const intervalStart = parseRfc3339Nanoseconds(interval.start);
+    const intervalEnd = parseRfc3339Nanoseconds(interval.end);
+    if (intervalStart === undefined || intervalEnd === undefined || intervalEnd <= intervalStart) {
       continue;
     }
-    const clippedStart = Math.max(horizonStart, intervalStart);
-    const clippedEnd = Math.min(horizonEnd, intervalEnd);
+    const clippedStart = intervalStart < horizonStart ? horizonStart : intervalStart;
+    const clippedEnd = intervalEnd > horizonEnd ? horizonEnd : intervalEnd;
     if (clippedEnd <= clippedStart) continue;
     const bar = element("span", "lane-bar");
-    bar.style.left = `${((clippedStart - horizonStart) / span) * 100}%`;
-    bar.style.width = `${((clippedEnd - clippedStart) / span) * 100}%`;
+    bar.style.left = `${percentage(clippedStart - horizonStart, span)}%`;
+    bar.style.width = `${percentage(clippedEnd - clippedStart, span)}%`;
     bar.style.setProperty("--row", String(index % 3));
     bar.title = `${interval.start} → ${interval.end}`;
     track.append(bar);
@@ -135,18 +137,20 @@ function lane(
   return row;
 }
 
-function overlapsHorizon(interval: IntervalDraft, horizonStart: number, horizonEnd: number): boolean {
-  const start = Date.parse(interval.start);
-  const end = Date.parse(interval.end);
-  return Number.isFinite(start) && Number.isFinite(end) && start < horizonEnd && end > horizonStart;
+function overlapsHorizon(interval: IntervalDraft, horizonStart: bigint, horizonEnd: bigint): boolean {
+  const start = parseRfc3339Nanoseconds(interval.start);
+  const end = parseRfc3339Nanoseconds(interval.end);
+  return start !== undefined && end !== undefined && start < horizonEnd && end > horizonStart;
 }
 
-function formatTick(milliseconds: number, span: number): string {
+function formatTick(nanoseconds: bigint, span: bigint): string {
   const options: Intl.DateTimeFormatOptions =
-    span <= 36 * 60 * 60 * 1_000
+    span <= 36n * 60n * 60n * 1_000_000_000n
       ? { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
       : { year: "numeric", month: "short", day: "numeric" };
-  return new Intl.DateTimeFormat(undefined, { ...options, timeZone: "UTC" }).format(milliseconds);
+  return new Intl.DateTimeFormat(undefined, { ...options, timeZone: "UTC" }).format(
+    epochMilliseconds(nanoseconds),
+  );
 }
 
 function legendItem(variant: "input" | "result", label: string): HTMLElement {

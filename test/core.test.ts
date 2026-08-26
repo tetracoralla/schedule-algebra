@@ -34,6 +34,33 @@ describe("interval algebra", () => {
     ]);
   });
 
+  it("keeps intersection and difference provenance local to each result segment", () => {
+    const schedules = [
+      schedule("a", [
+        { id: "left", start: 1, end: 2 },
+        { id: "right", start: 2, end: 3 },
+      ]),
+      schedule("b", [{ id: "window", start: 1, end: 2 }]),
+    ];
+    const intersection = runSchedule(request("intersection", schedules));
+    expect(intersection.ok && intersection.intervals).toEqual([
+      {
+        start: "2025-01-01T01:00:00Z",
+        end: "2025-01-01T02:00:00Z",
+        sources: ["a/interval/left", "b/interval/window"],
+      },
+    ]);
+
+    const difference = runSchedule(request("difference", schedules));
+    expect(difference.ok && difference.intervals).toEqual([
+      {
+        start: "2025-01-01T02:00:00Z",
+        end: "2025-01-01T03:00:00Z",
+        sources: ["a/interval/right"],
+      },
+    ]);
+  });
+
   it("subtracts the second schedule from the first", () => {
     const result = runSchedule(
       request("difference", [schedule("a", [{ start: 1, end: 5 }]), schedule("b", [{ start: 2, end: 3 }])]),
@@ -115,6 +142,79 @@ describe("closed contract and bounds", () => {
         oversized: "x".repeat(262_145),
       }),
     ).toMatchObject({ ok: false, error: { code: "LIMIT_EXCEEDED" } });
+
+    expect(
+      runSchedule(
+        request("union", [
+          {
+            id: "a",
+            intervals: [
+              { start: "2025-01-01T01:00:00Z", end: "2025-01-01T02:00:00Z" },
+              {
+                id: "item-1",
+                start: "2025-01-01T03:00:00Z",
+                end: "2025-01-01T04:00:00Z",
+              },
+            ],
+          },
+        ]),
+      ),
+    ).toMatchObject({ ok: false, error: { code: "INVALID_INPUT" } });
+  });
+
+  it("links reversed intervals and horizons to their offending fields", () => {
+    expect(runSchedule(request("union", [schedule("a", [{ start: 5, end: 1 }])]))).toMatchObject({
+      ok: false,
+      error: {
+        code: "INVALID_INTERVAL",
+        details: [{ path: "schedules.0.intervals.0.end" }],
+      },
+    });
+    expect(
+      runSchedule({
+        ...request("union", [schedule("a", [{ start: 1, end: 2 }])]),
+        horizon: { start: "2025-01-01T05:00:00Z", end: "2025-01-01T01:00:00Z" },
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "INVALID_INTERVAL", details: [{ path: "horizon.end" }] },
+    });
+  });
+
+  it("reports resolved-id collisions between intervals and recurrences", () => {
+    expect(
+      runSchedule({
+        operation: "union",
+        horizon: { start: "2025-01-01T00:00:00Z", end: "2025-01-01T10:00:00Z" },
+        schedules: [
+          {
+            id: "a",
+            intervals: [{ start: "2025-01-01T01:00:00Z", end: "2025-01-01T02:00:00Z" }],
+            recurrences: [
+              {
+                id: "item-1",
+                dtstart: "2025-01-01T03:00:00",
+                timeZone: "UTC",
+                rrule: "FREQ=DAILY;COUNT=1",
+                durationSeconds: 60,
+                maxOccurrences: 5,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: {
+        code: "INVALID_INPUT",
+        details: [
+          {
+            path: "schedules.0.recurrences.0.id",
+            message: "resolved item ids must be unique within a schedule",
+          },
+        ],
+      },
+    });
   });
 });
 
@@ -223,6 +323,12 @@ describe("bounded zoned recurrence", () => {
       schedules: [{ id: "a", recurrences: [{ id: "r", dtstart: "2025-01-01T00:00:00", timeZone: "Not/AZone", rrule: "FREQ=DAILY;COUNT=2", durationSeconds: 60, maxOccurrences: 10 }] }],
     };
     expect(runSchedule(base)).toMatchObject({ ok: false, error: { code: "INVALID_TIME_ZONE" } });
+    const fixedOffset = structuredClone(base);
+    fixedOffset.schedules[0]!.recurrences[0]!.timeZone = "+05:30";
+    expect(runSchedule(fixedOffset)).toMatchObject({
+      ok: false,
+      error: { code: "INVALID_TIME_ZONE" },
+    });
     const badUntil = structuredClone(base);
     badUntil.schedules[0]!.recurrences[0]!.timeZone = "UTC";
     badUntil.schedules[0]!.recurrences[0]!.rrule = "FREQ=DAILY;UNTIL=20250230T000000Z";

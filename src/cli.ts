@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFile, stat } from "node:fs/promises";
 import { ScheduleExecutor } from "./executor.js";
+import { encodeJsonLine } from "./response-budget.js";
 
 const MAX_INPUT_BYTES = 262_144;
 
@@ -35,8 +36,9 @@ async function main(): Promise<void> {
   executor.close();
   process.removeListener("SIGINT", abort);
   process.removeListener("SIGTERM", abort);
-  process.stdout.write(`${JSON.stringify(result, null, pretty ? 2 : undefined)}\n`);
-  process.exitCode = result.ok ? 0 : 2;
+  const encoded = encodeJsonLine(result, pretty ? 2 : undefined);
+  process.stdout.write(encoded.body);
+  process.exitCode = encoded.value.ok ? 0 : 2;
 }
 
 async function readStdin(): Promise<string> {

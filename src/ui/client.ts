@@ -11,6 +11,7 @@ import {
   validateOperation,
 } from "./form.js";
 import { intervalText, renderFailure, renderSuccess } from "./results.js";
+import { RunCoordinator } from "./run-coordinator.js";
 import { renderTimeCanvas } from "./time-canvas.js";
 import type { Operation, WorkspaceDraft } from "./types.js";
 
@@ -27,6 +28,7 @@ const timeCanvasLegend = required<HTMLElement>("#time-canvas-legend");
 
 let latestResult: ScheduleResult | undefined;
 let latestRequest: WorkspaceDraft | undefined;
+const runs = new RunCoordinator();
 
 loadWorkspace(form, schedules, SAMPLE);
 updateOperationHint();
@@ -91,16 +93,18 @@ form.addEventListener("submit", async (event) => {
   resultPane.hidden = true;
   resultPane.replaceChildren();
   renderTimeCanvas(timeCanvas, timeCanvasRange, timeCanvasLegend, request);
-  runButton.disabled = true;
-  runButton.textContent = "Running…";
+  const run = runs.start();
+  setRunning(true);
   announce("Calculation running");
   try {
     const response = await fetch("/api/run", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(request),
+      signal: run.signal,
     });
     const result = (await response.json()) as ScheduleResult;
+    if (!runs.isCurrent(run.id)) return;
     latestResult = result;
     if (result.ok) {
       renderTimeCanvas(timeCanvas, timeCanvasRange, timeCanvasLegend, request, result);
@@ -113,6 +117,7 @@ form.addEventListener("submit", async (event) => {
       announce(`Calculation failed: ${result.error.code}`);
     }
   } catch (error) {
+    if (!runs.isCurrent(run.id) || run.signal.aborted) return;
     const failure: ScheduleFailure = {
       ok: false,
       error: {
@@ -125,8 +130,7 @@ form.addEventListener("submit", async (event) => {
     renderFailure(resultPane, failure, request);
     announce("Calculation failed");
   } finally {
-    runButton.disabled = false;
-    runButton.textContent = "Run calculation";
+    if (runs.finish(run.id)) setRunning(false);
   }
 });
 
@@ -158,11 +162,20 @@ function clearOutcome(): void {
 }
 
 function invalidateOutcome(): void {
+  const hadOutcome = latestRequest !== undefined;
+  runs.invalidate();
+  setRunning(false);
   latestRequest = undefined;
   latestResult = undefined;
   resultPane.hidden = true;
   resultPane.replaceChildren();
   syncTimeCanvas();
+  if (hadOutcome) announce("Inputs changed; run again");
+}
+
+function setRunning(running: boolean): void {
+  runButton.disabled = running;
+  runButton.textContent = running ? "Running…" : "Run calculation";
 }
 
 function syncTimeCanvas(): void {
@@ -191,7 +204,9 @@ function clearInputError(target: EventTarget | null): void {
 
 function announce(message: string): void {
   status.textContent = "";
-  requestAnimationFrame(() => (status.textContent = message));
+  // requestAnimationFrame never fires in a background tab, which would drop
+  // the live-region update entirely.
+  setTimeout(() => (status.textContent = message), 0);
 }
 
 function required<T extends Element>(selector: string): T {

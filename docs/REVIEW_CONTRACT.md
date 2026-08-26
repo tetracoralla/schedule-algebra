@@ -34,17 +34,23 @@ git status --short
 The suite must establish:
 
 - half-open union/intersection/difference/gaps/overlaps and endpoint contact;
-- deterministic sorting/normalization and source correlation;
-- RFC3339 offset enforcement, positive intervals, closed objects, operation
-  arity, horizon/input/occurrence/result budgets;
+- deterministic sorting/normalization and output-segment-local source
+  correlation, including touching inputs normalized before intersection or
+  difference;
+- RFC3339 offset enforcement, IANA-only recurrence zones, positive intervals,
+  resolved item-id uniqueness, closed objects, operation arity, and
+  horizon/input/occurrence/result budgets;
 - RRULE COUNT, UTC UNTIL, mandatory semantic bound, mandatory horizon,
   unsupported high-frequency rejection, and post-limit recovery;
 - America/New_York spring gap rejection, fall fold earlier resolution, and a
   wall-time sequence whose UTC offset changes across DST;
-- a built CLI success and invalid exit;
-- a real stdio MCP initialize/list/call/invalid/recovery lifecycle and live
-  schema `additionalProperties: false`;
-- a real loopback HTTP page, success, invalid request, and recovery.
+- a built CLI success and invalid exit, with the complete emitted JSON line
+  inside the response-byte budget;
+- a real stdio MCP initialize/list/call/invalid/recovery lifecycle, live schema
+  `additionalProperties: false`, and the complete JSON-RPC tool-response line
+  inside the response-byte budget;
+- a real loopback HTTP page, success, invalid request, recovery, and complete
+  JSON body inside the response-byte budget;
 - non-JSON rejection, cumulative timeout, cancellation, queue overflow, close,
   and successful reuse after each applicable worker failure;
 - an isolated copy of the bundled plugin listing one live tool, rejecting an
@@ -60,14 +66,21 @@ than inheriting the source result:
 - installed manifest, MCP config, Skill, server bundle, and worker bundle match
   the reviewed source build;
 - a fresh Codex task routes an ordinary exact schedule question to
-  `schedule_run` and returns the exact interval result;
-- missing required facts are requested or rejected rather than guessed.
+  exactly one `schedule_run` call and returns the exact interval result,
+  including when human display labels are not valid technical IDs;
+- a separate cold prompt containing exact intervals but no explicit horizon
+  makes no `schedule_run` call, does not derive a horizon from the interval
+  endpoints, and asks for the horizon;
+- a separate cold recurrence prompt with an explicit horizon but no IANA zone,
+  duration, or `maxOccurrences` makes no `schedule_run` call and requests all
+  three missing facts. An RRULE `COUNT` does not replace `maxOccurrences`.
 
 For the human runtime, inspect the current rendered canvas at wide,
 intermediate, and narrow widths. Check content-driven reflow, absence of
 horizontal overflow, input/result lane alignment, keyboard submission,
-field-linked invalid feedback, stale-result invalidation, copy actions, and
-recovery. An HTTP page assertion alone is insufficient.
+field-linked invalid feedback, in-flight stale-response invalidation, exact
+sub-millisecond interval rendering, copy actions, and recovery. An HTTP page
+assertion alone is insufficient.
 
 ## Verdict lanes
 

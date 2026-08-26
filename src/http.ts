@@ -3,11 +3,19 @@ import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { pathToFileURL } from "node:url";
 import { ScheduleExecutor } from "./executor.js";
+import { encodeJsonLine } from "./response-budget.js";
 import { PAGE } from "./ui/page.js";
 import { STYLES } from "./ui/styles.js";
 
 const MAX_BODY_BYTES = 262_144;
-const UI_MODULES = new Set(["client.js", "form.js", "results.js", "time-canvas.js"]);
+const UI_MODULES = new Set([
+  "client.js",
+  "form.js",
+  "instant.js",
+  "results.js",
+  "run-coordinator.js",
+  "time-canvas.js",
+]);
 
 class BodyLimitError extends Error {}
 
@@ -100,14 +108,14 @@ async function readBody(request: IncomingMessage): Promise<string> {
 }
 
 function sendJson(response: ServerResponse, status: number, value: unknown): void {
-  const body = `${JSON.stringify(value)}\n`;
-  response.writeHead(status, {
+  const encoded = encodeJsonLine(value);
+  response.writeHead(encoded.exceeded ? 400 : status, {
     "content-type": "application/json; charset=utf-8",
-    "content-length": Buffer.byteLength(body),
+    "content-length": Buffer.byteLength(encoded.body),
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
   });
-  response.end(body);
+  response.end(encoded.body);
 }
 
 function sendText(

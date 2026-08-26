@@ -19611,7 +19611,9 @@ var LocalDateTimeSchema = external_exports.string().regex(
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/,
   "must be a local date-time without an offset"
 );
-var StableIdSchema = external_exports.string().min(1).max(80).regex(/^[A-Za-z0-9._-]+$/, "must use letters, numbers, dot, underscore, or hyphen");
+var StableIdSchema = external_exports.string().min(1).max(80).regex(/^[A-Za-z0-9._-]+$/, "must use letters, numbers, dot, underscore, or hyphen").describe(
+  "Stable ASCII technical identifier using only letters, numbers, dot, underscore, or hyphen; do not copy a human display label containing spaces or non-ASCII characters"
+);
 var IntervalInputSchema = external_exports.object({
   id: StableIdSchema.optional(),
   start: InstantSchema,
@@ -19638,22 +19640,22 @@ var ScheduleInputSchema = external_exports.object({
   }
   const ids = /* @__PURE__ */ new Set();
   for (const [index, interval] of (value.intervals ?? []).entries()) {
-    if (!interval.id) continue;
-    if (ids.has(interval.id)) {
+    const id = interval.id ?? `item-${index + 1}`;
+    if (ids.has(id)) {
       context.addIssue({
         code: external_exports.ZodIssueCode.custom,
         path: ["intervals", index, "id"],
-        message: "item ids must be unique within a schedule"
+        message: "resolved item ids must be unique within a schedule"
       });
     }
-    ids.add(interval.id);
+    ids.add(id);
   }
   for (const [index, recurrence] of (value.recurrences ?? []).entries()) {
     if (ids.has(recurrence.id)) {
       context.addIssue({
         code: external_exports.ZodIssueCode.custom,
         path: ["recurrences", index, "id"],
-        message: "item ids must be unique within a schedule"
+        message: "resolved item ids must be unique within a schedule"
       });
     }
     ids.add(recurrence.id);
@@ -19686,6 +19688,7 @@ import { Worker } from "node:worker_threads";
 
 // src/internal-model.ts
 var MAX_REQUEST_BYTES = 262144;
+var MAX_RESPONSE_BYTES = 524288;
 var MAX_HORIZON_NS = 366n * 86400n * 1000000000n;
 
 // src/executor.ts
@@ -19898,6 +19901,18 @@ function failure(code, message, details) {
   };
 }
 
+// src/response-budget.ts
+function outputLimitFailure(responseBytes) {
+  return {
+    ok: false,
+    error: {
+      code: "OUTPUT_LIMIT",
+      message: `response exceeds ${MAX_RESPONSE_BYTES} UTF-8 bytes`,
+      details: { responseBytes, limitBytes: MAX_RESPONSE_BYTES }
+    }
+  };
+}
+
 // src/mcp.ts
 var inputSchema = zodToJsonSchema2(ScheduleRequestSchema, {
   $refStrategy: "none",
@@ -19932,6 +19947,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     };
   }
   const result = await executor.run(request.params.arguments, { signal: extra.signal });
+  const response = toolResponse(result);
+  const wireBytes = jsonRpcLineBytes(response);
+  if (wireBytes > MAX_RESPONSE_BYTES) {
+    return toolResponse(outputLimitFailure(wireBytes));
+  }
+  return response;
+});
+function jsonRpcLineBytes(response) {
+  return Buffer.byteLength(
+    `${JSON.stringify({ jsonrpc: "2.0", id: 1234567890, result: response })}
+`,
+    "utf8"
+  );
+}
+function toolResponse(result) {
   return {
     isError: !result.ok,
     structuredContent: result,
@@ -19942,7 +19972,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       }
     ]
   };
-});
+}
 await server.connect(new StdioServerTransport());
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.once(signal, () => {

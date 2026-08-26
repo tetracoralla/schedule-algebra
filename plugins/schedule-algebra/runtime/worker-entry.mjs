@@ -8369,7 +8369,9 @@ var LocalDateTimeSchema = external_exports.string().regex(
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/,
   "must be a local date-time without an offset"
 );
-var StableIdSchema = external_exports.string().min(1).max(80).regex(/^[A-Za-z0-9._-]+$/, "must use letters, numbers, dot, underscore, or hyphen");
+var StableIdSchema = external_exports.string().min(1).max(80).regex(/^[A-Za-z0-9._-]+$/, "must use letters, numbers, dot, underscore, or hyphen").describe(
+  "Stable ASCII technical identifier using only letters, numbers, dot, underscore, or hyphen; do not copy a human display label containing spaces or non-ASCII characters"
+);
 var IntervalInputSchema = external_exports.object({
   id: StableIdSchema.optional(),
   start: InstantSchema,
@@ -8396,22 +8398,22 @@ var ScheduleInputSchema = external_exports.object({
   }
   const ids = /* @__PURE__ */ new Set();
   for (const [index, interval] of (value.intervals ?? []).entries()) {
-    if (!interval.id) continue;
-    if (ids.has(interval.id)) {
+    const id = interval.id ?? `item-${index + 1}`;
+    if (ids.has(id)) {
       context.addIssue({
         code: external_exports.ZodIssueCode.custom,
         path: ["intervals", index, "id"],
-        message: "item ids must be unique within a schedule"
+        message: "resolved item ids must be unique within a schedule"
       });
     }
-    ids.add(interval.id);
+    ids.add(id);
   }
   for (const [index, recurrence] of (value.recurrences ?? []).entries()) {
     if (ids.has(recurrence.id)) {
       context.addIssue({
         code: external_exports.ZodIssueCode.custom,
         path: ["recurrences", index, "id"],
-        message: "item ids must be unique within a schedule"
+        message: "resolved item ids must be unique within a schedule"
       });
     }
     ids.add(recurrence.id);
@@ -12489,14 +12491,17 @@ function executeOperation(operation, schedules, horizon) {
     case "union":
       return normalize(schedules.flatMap((schedule) => schedule.normalized));
     case "intersection":
-      return schedules.slice(1).reduce(
-        (current, schedule) => intersectTwo(current, schedule.normalized),
-        schedules[0]?.normalized ?? []
+      return attachContributors(
+        schedules.slice(1).reduce(
+          (current, schedule) => intersectTwo(current, schedule.normalized),
+          schedules[0]?.normalized ?? []
+        ),
+        schedules.flatMap((schedule) => schedule.raw)
       );
     case "difference":
-      return subtract(
-        schedules[0]?.normalized ?? [],
-        schedules[1]?.normalized ?? []
+      return attachContributors(
+        subtract(schedules[0]?.normalized ?? [], schedules[1]?.normalized ?? []),
+        schedules[0]?.raw ?? []
       );
     case "gaps":
       return complement(
@@ -12506,6 +12511,16 @@ function executeOperation(operation, schedules, horizon) {
     case "overlaps":
       return overlapSegments(schedules.flatMap((schedule) => schedule.raw));
   }
+}
+function attachContributors(intervals, sourceIntervals) {
+  return intervals.map((interval) => {
+    const sources = /* @__PURE__ */ new Set();
+    for (const sourceInterval of sourceIntervals) {
+      if (sourceInterval.start >= interval.end || sourceInterval.end <= interval.start) continue;
+      for (const source of sourceInterval.sources) sources.add(source);
+    }
+    return { start: interval.start, end: interval.end, sources };
+  });
 }
 function normalize(intervals) {
   const sorted = intervals.map((interval) => ({ ...interval, sources: new Set(interval.sources) })).sort(compareIntervals);
@@ -12653,6 +12668,7 @@ var ALLOWED_RRULE_KEYS = /* @__PURE__ */ new Set([
 var ALLOWED_FREQUENCIES = /* @__PURE__ */ new Set(["DAILY", "WEEKLY", "MONTHLY", "YEARLY"]);
 function expandRecurrence(scheduleId, recurrence, context) {
   const source = `${scheduleId}/recurrence/${recurrence.id}`;
+  assertIanaTimeZone(recurrence.timeZone, source);
   const dtstart = parseLocalDateTime(recurrence.dtstart, source);
   const dtstartResolution = resolveLocal(dtstart, recurrence.timeZone, source);
   if (dtstartResolution.fold) {
@@ -12737,6 +12753,16 @@ RRULE:${normalizedRule.engineRule}`,
     )
   });
   return intervals;
+}
+function assertIanaTimeZone(timeZone, source) {
+  if (timeZone.startsWith("+") || timeZone.startsWith("-")) {
+    throw new ScheduleError("INVALID_TIME_ZONE", `${source} has an invalid IANA time zone`);
+  }
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone }).resolvedOptions().timeZone;
+  } catch {
+    throw new ScheduleError("INVALID_TIME_ZONE", `${source} has an invalid IANA time zone`);
+  }
 }
 function normalizeRRule(value, timeZone) {
   const rule = value.trim().replace(/^RRULE:/i, "");
@@ -12937,7 +12963,9 @@ function runSchedule(input2) {
       warnings: /* @__PURE__ */ new Set(),
       totalGenerated: 0
     };
-    const schedules = request.schedules.map((schedule) => expandSchedule(schedule, context));
+    const schedules = request.schedules.map(
+      (schedule, index) => expandSchedule(schedule, index, context)
+    );
     const intervals = executeOperation(request.operation, schedules, horizon);
     if (intervals.length > request.maxResultIntervals) {
       throw new ScheduleError(
@@ -12978,10 +13006,14 @@ function runSchedule(input2) {
     };
     const responseBytes = Buffer.byteLength(JSON.stringify(result), "utf8");
     if (responseBytes > MAX_RESPONSE_BYTES) {
-      throw new ScheduleError("OUTPUT_LIMIT", "response exceeds 524288 UTF-8 bytes", {
-        responseBytes,
-        limitBytes: MAX_RESPONSE_BYTES
-      });
+      throw new ScheduleError(
+        "OUTPUT_LIMIT",
+        `response exceeds ${MAX_RESPONSE_BYTES} UTF-8 bytes`,
+        {
+          responseBytes,
+          limitBytes: MAX_RESPONSE_BYTES
+        }
+      );
     }
     return result;
   } catch (error) {
@@ -13023,17 +13055,16 @@ function parseHorizon(request) {
   const start = parseInstant(request.horizon.start, "horizon.start");
   const end = parseInstant(request.horizon.end, "horizon.end");
   if (end <= start) {
-    throw new ScheduleError(
-      "INVALID_INTERVAL",
-      "horizon must be a positive half-open interval"
-    );
+    throw new ScheduleError("INVALID_INTERVAL", "horizon must be a positive half-open interval", [
+      { path: "horizon.end", message: "must be after the horizon start" }
+    ]);
   }
   if (end - start > MAX_HORIZON_NS) {
     throw new ScheduleError("LIMIT_EXCEEDED", "horizon cannot exceed 366 elapsed days");
   }
   return { start, end, sources: /* @__PURE__ */ new Set() };
 }
-function expandSchedule(schedule, context) {
+function expandSchedule(schedule, scheduleIndex, context) {
   const raw = [];
   for (const [index, interval] of (schedule.intervals ?? []).entries()) {
     const start = parseInstant(interval.start, `${schedule.id}.intervals.${index}.start`);
@@ -13041,7 +13072,8 @@ function expandSchedule(schedule, context) {
     if (end <= start) {
       throw new ScheduleError(
         "INVALID_INTERVAL",
-        `${schedule.id}.intervals.${index} must have end after start`
+        `${schedule.id}.intervals.${index} must have end after start`,
+        [{ path: `schedules.${scheduleIndex}.intervals.${index}.end`, message: "must be after the interval start" }]
       );
     }
     const clipped = clipInterval(
