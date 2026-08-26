@@ -19919,7 +19919,7 @@ var inputSchema = zodToJsonSchema2(ScheduleRequestSchema, {
   target: "jsonSchema7"
 });
 var server = new Server(
-  { name: "schedule-algebra", version: "0.1.0" },
+  { name: "schedule-algebra", version: "0.1.1" },
   { capabilities: { tools: {} } }
 );
 var executor = new ScheduleExecutor();
