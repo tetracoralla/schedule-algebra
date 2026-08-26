@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { Writable } from "node:stream";
 import { Worker, type ResourceLimits } from "node:worker_threads";
 import type { ScheduleFailure, ScheduleResult } from "./contract.js";
+import { runSchedule } from "./core.js";
 import { MAX_REQUEST_BYTES, MAX_RESPONSE_BYTES } from "./internal-model.js";
 
 declare const __SCHEDULE_ALGEBRA_WORKER_URL__: string;
@@ -22,6 +23,7 @@ export interface ScheduleExecutorOptions {
   maxQueue?: number;
   resourceLimits?: ResourceLimits;
   processSource?: string;
+  allowDirectFallback?: boolean;
   workerUrl?: URL;
 }
 
@@ -47,6 +49,7 @@ export class ScheduleExecutor {
   private readonly maxQueue: number;
   private readonly resourceLimits: ResourceLimits;
   private readonly processSource: string | undefined;
+  private readonly allowDirectFallback: boolean;
   private readonly workerUrl: URL | undefined;
   private readonly jobs = new Set<QueueJob>();
   private queue: QueueJob[] = [];
@@ -62,7 +65,11 @@ export class ScheduleExecutor {
     );
     this.maxQueue = nonNegativeInteger(options.maxQueue, DEFAULT_MAX_QUEUE, "maxQueue");
     this.resourceLimits = options.resourceLimits ?? DEFAULT_RESOURCE_LIMITS;
-    this.processSource = options.processSource ?? (options.workerUrl ? undefined : defaultProcessSource());
+    const embeddedProcessSource = options.workerUrl ? undefined : defaultProcessSource();
+    this.processSource = options.processSource ?? embeddedProcessSource;
+    this.allowDirectFallback =
+      options.allowDirectFallback ??
+      (options.processSource === undefined && embeddedProcessSource !== undefined);
     this.workerUrl = this.processSource === undefined ? (options.workerUrl ?? defaultWorkerUrl()) : undefined;
   }
 
@@ -166,6 +173,7 @@ export class ScheduleExecutor {
           this.resourceLimits,
           job.deadline,
           job.controller.signal,
+          this.allowDirectFallback,
         );
     void execution.then((result) => {
       this.complete(job, result);
@@ -198,6 +206,7 @@ function runProcess(
   resourceLimits: ResourceLimits,
   deadline: number,
   signal: AbortSignal,
+  allowDirectFallback: boolean,
 ): Promise<ScheduleResult> {
   return runProcessAttempt(
     serialized,
@@ -212,8 +221,32 @@ function runProcess(
       return failure("EXECUTION_TIMEOUT", "schedule execution exceeded its deadline");
     }
     operatorDiagnostic("process retry", "retrying one abnormal installed-process exit");
-    return runProcessAttempt(serialized, processSource, resourceLimits, remainingMs, signal);
+    const retry = await runProcessAttempt(
+      serialized,
+      processSource,
+      resourceLimits,
+      remainingMs,
+      signal,
+    );
+    if (!allowDirectFallback || !isRetryableProcessFailure(retry) || signal.aborted) return retry;
+    if (performance.now() >= deadline) {
+      return failure("EXECUTION_TIMEOUT", "schedule execution exceeded its deadline");
+    }
+    operatorDiagnostic(
+      "process fallback",
+      "using the bounded in-process core after two abnormal installed-process exits",
+    );
+    return runDirect(serialized);
   });
+}
+
+function runDirect(serialized: string): ScheduleResult {
+  try {
+    return runSchedule(JSON.parse(serialized));
+  } catch (error) {
+    operatorDiagnostic("direct fallback failed", error);
+    return failure("EXECUTION_FAILED", "schedule execution failed");
+  }
 }
 
 function runProcessAttempt(

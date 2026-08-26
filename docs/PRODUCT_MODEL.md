@@ -88,9 +88,12 @@ old generation, 16 MiB young generation, and a 4 MiB stack. These are
 JavaScript heap/stack controls, not a guarantee on whole-process RSS. JSON
 framing and adapter protocol parsing still occur outside the isolated process.
 The bundled MCP may retry one abnormal child-process start or exit inside that
-same deadline because the operation is read-only and deterministic. It does not
-retry timeouts, cancellation, resource exhaustion, invalid results, or any
-semantic failure returned by the core.
+same deadline because the operation is read-only and deterministic. If both
+isolated attempts end abnormally and time remains, the bundled MCP runs the same
+bounded pure core directly in its server process. That compatibility fallback
+does not provide per-call heap isolation, so it is never selected for timeouts,
+cancellation, resource exhaustion, invalid process results, or any semantic
+failure returned by the core.
 
 ## Agent surface
 

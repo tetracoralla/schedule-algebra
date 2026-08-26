@@ -54,7 +54,7 @@ The repository contains a self-contained plugin with one thin Skill and a
 bundled MCP runtime. Install the reviewed release from its immutable tag:
 
 ```sh
-codex plugin marketplace add https://github.com/tetracoralla/schedule-algebra.git --ref v0.1.5 --json
+codex plugin marketplace add https://github.com/tetracoralla/schedule-algebra.git --ref v0.1.6 --json
 codex plugin add schedule-algebra@schedule-algebra --json
 ```
 

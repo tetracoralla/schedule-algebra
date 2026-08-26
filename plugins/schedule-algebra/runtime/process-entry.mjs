@@ -13108,4 +13108,16 @@ try {
 } catch {
   input = void 0;
 }
-process.stdout.write(JSON.stringify(runSchedule(input)));
+try {
+  process.stdout.write(JSON.stringify(runSchedule(input)));
+} catch (error) {
+  const diagnostic = error instanceof Error ? error.stack ?? error.message : String(error);
+  process.stderr.write(`[schedule-algebra] isolated core error: ${diagnostic.slice(0, 8192)}
+`);
+  process.stdout.write(
+    JSON.stringify({
+      ok: false,
+      error: { code: "EXECUTION_FAILED", message: "schedule execution failed" }
+    })
+  );
+}

@@ -249,4 +249,23 @@ describe("isolated process executor", () => {
       await rm(temporaryRoot, { recursive: true, force: true });
     }
   });
+
+  it("uses the bounded direct core only after two abnormal process exits", async () => {
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const executor = new ScheduleExecutor({
+      processSource: 'throw new Error("infrastructure exit");',
+      allowDirectFallback: true,
+    });
+    try {
+      await expect(executor.run(validRequest())).resolves.toMatchObject({
+        ok: true,
+        operation: "union",
+      });
+      expect(stderr).toHaveBeenCalledWith(expect.stringContaining("process retry"));
+      expect(stderr).toHaveBeenCalledWith(expect.stringContaining("process fallback"));
+    } finally {
+      executor.close();
+      stderr.mockRestore();
+    }
+  });
 });

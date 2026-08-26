@@ -10,7 +10,9 @@ not authority. Keep review read-only unless the owner also requests repair.
    shared limits, interval operations, RRULE expansion, and DST behavior.
 3. `src/executor.ts` owns external-call admission, queueing, per-call isolation,
    deadlines, cancellation, and V8 resource limits. Source carriers use a Node
-   Worker; the bundled Codex MCP uses an isolated Node child process.
+   Worker; the bundled Codex MCP uses an isolated Node child process, with a
+   bounded direct-core compatibility fallback only after two abnormal
+   infrastructure exits.
 4. `src/cli.ts`, `src/mcp.ts`, and `src/http.ts` are adapters around that
    executor; `src/ui/*` owns the human workbench and time canvas.
 5. `plugins/schedule-algebra` owns the bundled Codex runtime and thin routing
@@ -53,8 +55,8 @@ The suite must establish:
 - a real loopback HTTP page, success, invalid request, recovery, and complete
   JSON body inside the response-byte budget;
 - non-JSON rejection, cumulative timeout, cancellation, queue overflow, close,
-  one bounded abnormal-process retry, and successful reuse after each
-  applicable isolated-execution failure;
+  one bounded abnormal-process retry, direct fallback after two infrastructure
+  exits, and successful reuse after each applicable isolated-execution failure;
 - an isolated copy of the bundled plugin listing one live tool, rejecting an
   invalid call, recovering on a valid call, and requiring no repo dependencies.
 

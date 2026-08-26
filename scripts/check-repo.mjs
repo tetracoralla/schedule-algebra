@@ -95,6 +95,8 @@ const executor = await readFile("src/executor.ts", "utf8");
 for (const invariant of [
   "new Worker",
   "spawn(process.execPath",
+  "allowDirectFallback",
+  "runDirect",
   "resourceLimits",
   "EXECUTION_TIMEOUT",
   "SERVER_BUSY",
