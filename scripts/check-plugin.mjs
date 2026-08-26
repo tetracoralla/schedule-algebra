@@ -43,6 +43,7 @@ const temporaryRoot = await mkdtemp(join(tmpdir(), "schedule-algebra-plugin-chec
 const isolatedPlugin = resolve(temporaryRoot, "schedule-algebra");
 try {
   await cp(pluginRoot, isolatedPlugin, { recursive: true });
+  await rm(resolve(isolatedPlugin, "runtime/worker-entry.mjs"));
   const transport = new StdioClientTransport({
     command: "node",
     args: ["runtime/schedule-algebra-mcp.mjs"],

@@ -2,6 +2,8 @@ import { Worker, type ResourceLimits } from "node:worker_threads";
 import type { ScheduleFailure, ScheduleResult } from "./contract.js";
 import { MAX_REQUEST_BYTES } from "./internal-model.js";
 
+declare const __SCHEDULE_ALGEBRA_WORKER_URL__: string;
+
 const DEFAULT_TIMEOUT_MS = 2_000;
 const DEFAULT_MAX_CONCURRENT = 2;
 const DEFAULT_MAX_QUEUE = 32;
@@ -213,6 +215,11 @@ function runWorker(
     worker.once("message", (result: ScheduleResult) => finish(result));
     worker.once("error", (error) => {
       const resourceLimit = (error as NodeJS.ErrnoException).code === "ERR_WORKER_OUT_OF_MEMORY";
+      const errorCode = (error as NodeJS.ErrnoException).code;
+      const diagnostic = error instanceof Error ? (error.stack ?? error.message) : String(error);
+      process.stderr.write(
+        `[schedule-algebra] worker error${errorCode ? ` (${errorCode})` : ""}: ${diagnostic}\n`,
+      );
       finish(
         failure(
           resourceLimit ? "EXECUTION_RESOURCE_LIMIT" : "EXECUTION_FAILED",
@@ -234,6 +241,9 @@ function runWorker(
 }
 
 function defaultWorkerUrl(): URL {
+  if (typeof __SCHEDULE_ALGEBRA_WORKER_URL__ === "string") {
+    return new URL(__SCHEDULE_ALGEBRA_WORKER_URL__);
+  }
   if (import.meta.url.endsWith(".ts")) {
     return new URL("../dist/worker-entry.js", import.meta.url);
   }

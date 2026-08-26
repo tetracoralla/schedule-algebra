@@ -22,18 +22,26 @@ const shared = {
   metafile: true,
 };
 
-const buildResults = await Promise.all([
-  build({
-    ...shared,
-    entryPoints: ["src/mcp.ts"],
-    outfile: fileURLToPath(new URL("schedule-algebra-mcp.mjs", runtimeUrl)),
-  }),
-  build({
-    ...shared,
-    entryPoints: ["src/worker-entry.ts"],
-    outfile: fileURLToPath(new URL("worker-entry.mjs", runtimeUrl)),
-  }),
-]);
+const workerResult = await build({
+  ...shared,
+  entryPoints: ["src/worker-entry.ts"],
+  outfile: fileURLToPath(new URL("worker-entry.mjs", runtimeUrl)),
+  write: false,
+});
+const workerOutput = workerResult.outputFiles?.find((output) => output.path.endsWith("worker-entry.mjs"));
+if (!workerOutput) throw new Error("worker bundle output is missing");
+await writeFile(fileURLToPath(new URL("worker-entry.mjs", runtimeUrl)), workerOutput.contents);
+
+const workerDataUrl = `data:text/javascript;base64,${Buffer.from(workerOutput.contents).toString("base64")}`;
+const mcpResult = await build({
+  ...shared,
+  define: {
+    __SCHEDULE_ALGEBRA_WORKER_URL__: JSON.stringify(workerDataUrl),
+  },
+  entryPoints: ["src/mcp.ts"],
+  outfile: fileURLToPath(new URL("schedule-algebra-mcp.mjs", runtimeUrl)),
+});
+const buildResults = [mcpResult, workerResult];
 
 const bundledPackageRoots = new Set();
 for (const result of buildResults) {

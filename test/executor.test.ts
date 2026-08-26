@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ScheduleExecutor } from "../src/executor.js";
 import { request, schedule } from "./fixtures.js";
 
@@ -87,5 +87,24 @@ describe("isolated schedule executor", () => {
       ok: false,
       error: { code: "EXECUTION_CANCELLED" },
     });
+  });
+
+  it("keeps worker failure details out of the Agent result and logs them for operators", async () => {
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const executor = new ScheduleExecutor({
+      workerUrl: new URL("./fixtures/failing-worker.mjs", import.meta.url),
+    });
+    try {
+      const result = await executor.run(validRequest());
+      expect(result).toMatchObject({
+        ok: false,
+        error: { code: "EXECUTION_FAILED", message: "schedule worker failed" },
+      });
+      expect(result.error).not.toHaveProperty("details");
+      expect(stderr).toHaveBeenCalledWith(expect.stringContaining("intentional worker failure"));
+    } finally {
+      executor.close();
+      stderr.mockRestore();
+    }
   });
 });

@@ -18,7 +18,7 @@ const inputSchema = zodToJsonSchema(ScheduleRequestSchema, {
 });
 
 const server = new Server(
-  { name: "schedule-algebra", version: "0.1.3" },
+  { name: "schedule-algebra", version: "0.1.4" },
   { capabilities: { tools: {} } },
 );
 const executor = new ScheduleExecutor();
