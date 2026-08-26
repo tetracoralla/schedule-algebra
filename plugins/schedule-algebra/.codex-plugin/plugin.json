@@ -1,6 +1,6 @@
 {
   "name": "schedule-algebra",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Bounded interval and zoned-recurrence set algebra for Codex.",
   "author": {
     "name": "openAdam"

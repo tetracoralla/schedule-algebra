@@ -45,6 +45,20 @@ describe("CLI runtime", () => {
   });
 });
 
+describe("plugin verifier", () => {
+  it("rejects caller-supplied plugin roots", async () => {
+    const child = spawn("node", ["scripts/check-plugin.mjs", "/tmp/untrusted-plugin"], {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stderr = "";
+    child.stderr.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
+    const [code] = (await once(child, "close")) as [number | null];
+    expect(code).not.toBe(0);
+    expect(stderr).toContain("accepts no path arguments");
+  });
+});
+
 async function runCli(input: string, args: string[] = []): Promise<{ code: number | null; stdout: string; stderr: string }> {
   const child = spawn("node", ["dist/cli.js", ...args], {
     cwd: process.cwd(),

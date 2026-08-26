@@ -6,9 +6,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 const root = process.cwd();
-const pluginRoot = process.argv[2]
-  ? resolve(process.argv[2])
-  : resolve(root, "plugins/schedule-algebra");
+if (process.argv.length !== 2) {
+  throw new Error("check-plugin validates only the repository-owned plugin and accepts no path arguments");
+}
+const pluginRoot = resolve(root, "plugins/schedule-algebra");
 const manifest = JSON.parse(await readFile(resolve(pluginRoot, ".codex-plugin/plugin.json"), "utf8"));
 const mcp = JSON.parse(await readFile(resolve(pluginRoot, ".mcp.json"), "utf8"));
 const skill = await readFile(
@@ -22,15 +23,13 @@ assert.deepEqual(mcp.mcpServers?.["schedule-algebra"]?.args, ["runtime/schedule-
 assert.match(skill, /Do not derive the horizon from interval endpoints/);
 assert.match(skill, /`COUNT` or `UNTIL` does not replace `maxOccurrences`/);
 assert.match(skill, /Make no `schedule_run` call and do not calculate or infer an answer/);
-if (!process.argv[2]) {
-  const marketplace = JSON.parse(
-    await readFile(resolve(root, ".agents/plugins/marketplace.json"), "utf8"),
-  );
-  const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
-  assert.equal(manifest.version, packageJson.version);
-  assert.equal(marketplace.name, "schedule-algebra");
-  assert.equal(marketplace.plugins?.[0]?.source?.path, "./plugins/schedule-algebra");
-}
+const marketplace = JSON.parse(
+  await readFile(resolve(root, ".agents/plugins/marketplace.json"), "utf8"),
+);
+const packageJson = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+assert.equal(manifest.version, packageJson.version);
+assert.equal(marketplace.name, "schedule-algebra");
+assert.equal(marketplace.plugins?.[0]?.source?.path, "./plugins/schedule-algebra");
 await access(resolve(pluginRoot, "runtime/schedule-algebra-mcp.mjs"));
 await access(resolve(pluginRoot, "runtime/worker-entry.mjs"));
 for (const legalFile of ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]) {
