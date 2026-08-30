@@ -10,7 +10,7 @@ import {
   SAMPLE,
   validateOperation,
 } from "./form.js";
-import { intervalText, renderFailure, renderSuccess } from "./results.js";
+import { intervalCountText, intervalText, renderFailure, renderSuccess } from "./results.js";
 import { RunCoordinator } from "./run-coordinator.js";
 import { renderTimeCanvas } from "./time-canvas.js";
 import type { Operation, WorkspaceDraft } from "./types.js";
@@ -109,7 +109,7 @@ form.addEventListener("submit", async (event) => {
     if (result.ok) {
       renderTimeCanvas(timeCanvas, timeCanvasRange, timeCanvasLegend, request, result);
       renderSuccess(resultPane, result, request);
-      announce(`Calculation complete: ${result.intervals.length} intervals`);
+      announce(`Calculation complete: ${intervalCountText(result.intervals.length)}`);
     } else {
       renderTimeCanvas(timeCanvas, timeCanvasRange, timeCanvasLegend, request);
       renderFailure(resultPane, result, request);
@@ -165,6 +165,9 @@ function invalidateOutcome(): void {
   const hadOutcome = latestRequest !== undefined;
   runs.invalidate();
   setRunning(false);
+  // Field paths can be renumbered by structural edits. Once the associated
+  // result is invalidated, no previous marker remains authoritative.
+  clearFieldErrors(form);
   latestRequest = undefined;
   latestResult = undefined;
   resultPane.hidden = true;

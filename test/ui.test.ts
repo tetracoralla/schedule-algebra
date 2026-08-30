@@ -6,6 +6,8 @@ import {
   percentage,
 } from "../src/ui/instant.js";
 import { RunCoordinator } from "../src/ui/run-coordinator.js";
+import { clearFieldErrors } from "../src/ui/form.js";
+import { intervalCountText } from "../src/ui/results.js";
 
 describe("UI instant precision", () => {
   it("preserves RFC 3339 nanoseconds and displays sub-millisecond durations", () => {
@@ -28,6 +30,30 @@ describe("UI instant precision", () => {
 });
 
 describe("UI run coordination", () => {
+  it("clears every stale field marker when an outcome is invalidated", () => {
+    const removed: string[] = [];
+    const fields = ["schedules.0.id", "schedules.1.id"].map((path) => ({
+      removeAttribute(name: string) {
+        removed.push(`${path}:${name}`);
+      },
+    }));
+    const form = {
+      querySelectorAll: () => fields,
+    } as unknown as HTMLFormElement;
+
+    clearFieldErrors(form);
+
+    expect(removed).toEqual([
+      "schedules.0.id:aria-invalid",
+      "schedules.1.id:aria-invalid",
+    ]);
+  });
+
+  it("announces singular and plural interval counts naturally", () => {
+    expect(intervalCountText(1)).toBe("1 interval");
+    expect(intervalCountText(2)).toBe("2 intervals");
+  });
+
   it("aborts and invalidates a run when inputs change", () => {
     const coordinator = new RunCoordinator();
     const first = coordinator.start();
