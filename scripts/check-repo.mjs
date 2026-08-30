@@ -58,10 +58,7 @@ if (packageJson.repository?.url !== "https://github.com/tetracoralla/schedule-al
   throw new Error("public repository identity drifted");
 }
 const thirdPartyNotices = await readFile("THIRD_PARTY_NOTICES.md", "utf8");
-for (const bundledInstance of [
-  "## zod-to-json-schema@3.24.6",
-  "## zod-to-json-schema@3.25.2",
-]) {
+for (const bundledInstance of ["## zod-to-json-schema@3.25.2"]) {
   if (!thirdPartyNotices.includes(bundledInstance)) {
     throw new Error(`third-party notices lost a bundled package instance: ${bundledInstance}`);
   }

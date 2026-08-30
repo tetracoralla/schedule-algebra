@@ -58,6 +58,10 @@ export function intervalText(result: ScheduleSuccess): string {
   return result.intervals.map((interval) => `${interval.start}\t${interval.end}`).join("\n");
 }
 
+export function intervalCountText(count: number): string {
+  return `${count} interval${count === 1 ? "" : "s"}`;
+}
+
 function intervalSection(result: ScheduleSuccess): HTMLElement {
   const section = resultSection("Intervals");
   if (result.intervals.length === 0) {
@@ -104,7 +108,7 @@ function recurrenceSection(result: ScheduleSuccess): HTMLElement {
   const list = element("ul", "recurrence-list");
   for (const recurrence of result.recurrence) {
     const item = document.createElement("li");
-    item.textContent = `${recurrence.source}: ${recurrence.generated} occurrence(s)`;
+    item.textContent = `${recurrence.source}: ${recurrence.generated} occurrence${recurrence.generated === 1 ? "" : "s"}`;
     list.append(item);
   }
   section.append(list);
