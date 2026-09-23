@@ -7,6 +7,13 @@ description: Call Schedule Algebra schedule_run once for exact union, intersecti
 
 Use the deterministic runtime when the requested output is a set of exact instant intervals and the necessary schedule facts are explicit. Answer conceptual questions normally when no computation is requested.
 
+This also applies inside an implementation or diagnosis: availability windows,
+overlapping reservations, and repeated schedules need not be recalculated in
+model reasoning. Recover explicit inputs from the task's supplied data or owning
+requirements before asking the user to repeat them. Use the returned intervals
+in the actual behavior under construction; a successful calculation does not
+establish that the surrounding UI, persistence, or scheduling action works.
+
 ## Route one complete call
 
 - Call `schedule_run` directly. Do not list MCP resources or templates; this plugin exposes none.
@@ -17,7 +24,7 @@ Use the deterministic runtime when the requested output is a set of exact instan
 
 ## Verify required facts before calling
 
-- Every operation requires an explicit horizon supplied as a distinct user fact. Do not derive the horizon from interval endpoints, recurrence bounds, or the visible data range.
+- Every operation requires an explicit horizon from the user or the task's owning requirements. Do not derive the horizon from interval endpoints, recurrence bounds, or the visible data range.
 - Every recurrence requires an explicit local `dtstart`, IANA `timeZone`, RRULE bounded by `COUNT` or UTC `UNTIL`, positive `durationSeconds`, and positive `maxOccurrences`. The RRULE bound and `maxOccurrences` are independent; `COUNT` or `UNTIL` does not replace `maxOccurrences`.
 - If any required fact is absent or ambiguous, ask for all missing facts in one clarification and end the turn. Make no `schedule_run` call and do not calculate or infer an answer.
 
